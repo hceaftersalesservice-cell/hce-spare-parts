@@ -686,7 +686,7 @@
         table {
             width: 100%;
 
-            min-width: 1100px;
+            min-width: 1220px;
 
             border-collapse:
                 separate;
@@ -822,6 +822,20 @@
         .lead-time {
             font-variant-numeric:
                 tabular-nums;
+        }
+
+        .stock-qty-cell {
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+            font-weight: 800;
+        }
+
+        .stock-qty-zero {
+            color: var(--danger);
+        }
+
+        .stock-qty-positive {
+            color: var(--success);
         }
 
         .status-badge {
@@ -2077,6 +2091,16 @@
 
                                 <th
                                     class="sortable"
+                                    data-sort-key="STOCK QTY"
+                                >
+                                    <span class="th-content">
+                                        STOCK
+                                        <span class="sort-icon">↕</span>
+                                    </span>
+                                </th>
+
+                                <th
+                                    class="sortable"
                                     data-sort-key="LEAD TIME"
                                 >
                                     <span class="th-content">
@@ -2321,7 +2345,9 @@
             "GROUP NO",
             "SYSTEM NAME",
             "BOI NAME",
-            "STOCK AVAILABLE"
+            "STOCK QTY",
+            "STOCK AVAILABLE",
+            "STOCK STATUS"
         ];
 
         /* =========================================================
@@ -2463,13 +2489,22 @@
                 "BOI ITEM NAME"
             ],
 
-            "STOCK AVAILABLE": [
-                "STOCK AVAILABLE",
+            "STOCK QTY": [
                 "STOCK",
                 "STOCK QTY",
                 "STOCK QUANTITY",
-                "AVAILABLE STOCK",
-                "QTY IN STOCK"
+                "AVAILABLE QTY",
+                "AVAILABLE QUANTITY",
+                "QTY IN STOCK",
+                "QUANTITY IN STOCK",
+                "STOCK BALANCE",
+                "ON HAND QTY",
+                "ON HAND QUANTITY",
+                "ON HAND"
+            ],
+
+            "STOCK AVAILABLE": [
+                "STOCK AVAILABLE"
             ],
 
             "STOCK STATUS": [
@@ -2882,6 +2917,39 @@
                     "/",
                     originalData.length
                 );
+
+                const stockQtyCount =
+                    originalData.filter(
+                        record =>
+                            getValue(
+                                record,
+                                "STOCK QTY"
+                            ) !== null &&
+                            getValue(
+                                record,
+                                "STOCK QTY"
+                            ) !== undefined &&
+                            String(
+                                getValue(
+                                    record,
+                                    "STOCK QTY"
+                                )
+                            ).trim() !== ""
+                    ).length;
+
+                console.info(
+                    "[HCE] Stock quantity records:",
+                    stockQtyCount,
+                    "/",
+                    originalData.length
+                );
+
+                if (originalData.length) {
+                    console.info(
+                        "[HCE] STOCK sample:",
+                        originalData[0]["STOCK QTY"]
+                    );
+                }
 
                 /*
                  * If this says 0 while Google Sheet definitely
@@ -3424,9 +3492,10 @@
         ) {
 
             const fields = [
-                "STOCK AVAILABLE",
                 "STOCK STATUS",
-                "AVAILABLE"
+                "STOCK AVAILABLE",
+                "AVAILABLE",
+                "STOCK QTY"
             ];
 
             for (
@@ -3467,9 +3536,41 @@
             value
         ) {
 
+            if (
+                value === null ||
+                value === undefined
+            ) {
+                return "unknown";
+            }
+
+            const raw =
+                String(value).trim();
+
+            if (!raw) {
+                return "unknown";
+            }
+
+            /*
+             * If the API sends a numeric stock quantity:
+             *   5 / 10 / 1  => Available
+             *   0           => Not Available
+             */
+            const numeric =
+                parseNumeric(raw);
+
+            if (
+                /^[-+]?\d+(?:\.\d+)?$/.test(
+                    raw.replace(/,/g, "")
+                ) &&
+                numeric !== null
+            ) {
+                return numeric > 0
+                    ? "available"
+                    : "not available";
+            }
+
             const normalized =
-                String(value)
-                    .trim()
+                raw
                     .toLowerCase()
                     .replace(
                         /[_-]+/g,
@@ -4362,6 +4463,12 @@
                     "MODEL"
                 );
 
+            const stockQty =
+                getValue(
+                    record,
+                    "STOCK QTY"
+                );
+
             const leadTime =
                 getValue(
                     record,
@@ -4413,6 +4520,27 @@
                 textCell(
                     model
                 )
+            );
+
+            const stockQtyCell =
+                textCell(
+                    formatStockQty(stockQty),
+                    "stock-qty-cell"
+                );
+
+            const stockQtyNumber =
+                parseNumeric(stockQty);
+
+            if (stockQtyNumber !== null) {
+                stockQtyCell.classList.add(
+                    stockQtyNumber > 0
+                        ? "stock-qty-positive"
+                        : "stock-qty-zero"
+                );
+            }
+
+            tr.appendChild(
+                stockQtyCell
             );
 
             tr.appendChild(
@@ -4725,6 +4853,16 @@
 
                     } else if (
                         field ===
+                        "STOCK QTY"
+                    ) {
+
+                        value.textContent =
+                            formatStockQty(
+                                raw
+                            );
+
+                    } else if (
+                        field ===
                         "STOCK AVAILABLE"
                     ) {
 
@@ -4733,6 +4871,18 @@
                                 raw,
                                 record.__STATUS
                             );
+
+                    } else if (
+                        field ===
+                        "STOCK STATUS"
+                    ) {
+
+                        value.textContent =
+                            record.__STATUS === "available"
+                                ? "Available"
+                                : record.__STATUS === "not available"
+                                    ? "Not Available"
+                                    : "Unknown";
 
                     } else {
 
@@ -4803,6 +4953,7 @@
                 "L/P USD",
                 "L/P THB",
                 "MODEL",
+                "STOCK",
                 "LEAD TIME",
                 "STOCK STATUS"
             ];
@@ -4839,6 +4990,11 @@
                         getValue(
                             record,
                             "MODEL"
+                        ),
+
+                        getValue(
+                            record,
+                            "STOCK QTY"
                         ),
 
                         getValue(
@@ -5038,6 +5194,36 @@
                     maximumFractionDigits: 2
                 }
             );
+        }
+
+        function formatStockQty(
+            value
+        ) {
+
+            if (
+                value === null ||
+                value === undefined ||
+                String(value).trim() === ""
+            ) {
+                return "—";
+            }
+
+            const numeric =
+                parseNumeric(value);
+
+            if (numeric === null) {
+                return String(value).trim();
+            }
+
+            return Number.isInteger(numeric)
+                ? numeric.toLocaleString("en-US")
+                : numeric.toLocaleString(
+                    "en-US",
+                    {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2
+                    }
+                );
         }
 
         function formatInteger(
